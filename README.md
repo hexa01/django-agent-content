@@ -64,6 +64,14 @@ register(Resource(
 Only listed fields are exposed. Saves go through a ModelForm and your model's `save()`, so validation and side
 effects match the admin.
 
+### Full example
+
+[`tests/testapp`](tests/testapp) is a small working app used by the tests:
+[`models.py`](tests/testapp/models.py) and its [`agent_resources.py`](tests/testapp/agent_resources.py) show most
+options together: references by name, tags created when missing, drafts by default, a slug that locks once
+published, a filter, search, a `publish` action with a parameter, an inline list (an article's notes) and a
+single-object resource (site settings).
+
 ### Resource options
 
 | Option | Meaning |

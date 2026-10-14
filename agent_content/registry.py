@@ -36,7 +36,7 @@ class Action:
 
 @dataclass
 class Inline:
-    """Child rows edited as one list, e.g. a project's key decisions: GET or PUT <resource>/<lookup>/<name>/.
+    """Child rows edited as one list, e.g. an article's notes: GET or PUT <resource>/<lookup>/<name>/.
     PUT replaces the whole list (rows not sent are removed), in the order given."""
 
     model: Any
