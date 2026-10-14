@@ -97,7 +97,16 @@ class ReadTests(APITestCase):
         self.assertEqual(articles['fields']['summary']['help'], 'One sentence for lists.')
         self.assertTrue(articles['fields']['slug']['locked_when_published'])
         self.assertEqual(articles['fields']['tags']['refer_by'], 'name')
-        self.assertEqual((articles['actions'], articles['inlines']), (['publish'], {'notes': ['text']}))
+        self.assertEqual((articles['singular'], articles['create_defaults']), ('article', {'status': 'draft'}))
+        title, summary, status = (articles['fields'][n] for n in ('title', 'summary', 'status'))
+        self.assertEqual((title['kind'], title['required'], title['max_length']), ('string', True, 100))
+        self.assertFalse(summary['required'])
+        self.assertEqual((status['writable'], status['choices']), (False, ['draft', 'published']))
+        self.assertEqual(articles['actions']['publish'],
+                         {'description': 'Make the article public.', 'params': {'published_at': 'ISO date, optional.'}})
+        self.assertTrue(articles['inlines']['notes']['fields']['text']['required'])
+        site = next(r for r in body['resources'] if r['name'] == 'site')
+        self.assertEqual((site['singleton'], site['lookup'], site['singular']), (True, None, 'site'))
 
     def test_list_filter_search_and_read(self):
         Article.objects.create(slug='draft', title='A draft', body='x')

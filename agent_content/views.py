@@ -62,38 +62,69 @@ def _inline_rows(obj, inline):
     return [{name: getattr(row, name) for name in inline.fields} for row in rows]
 
 
+KINDS = {
+    'CharField': 'string', 'SlugField': 'string', 'URLField': 'string', 'EmailField': 'string', 'TextField': 'text',
+    'BooleanField': 'boolean', 'DateTimeField': 'datetime', 'DateField': 'date', 'TimeField': 'time',
+    'DecimalField': 'number', 'FloatField': 'number', 'JSONField': 'json',
+}
+
+
+def _field_info(model, name, required, writable=True, relation=None):
+    """How an agent should fill one field: kind, label, help text, limits, choices."""
+    field = model._meta.get_field(name)
+    internal = field.get_internal_type()
+    if field.many_to_many:
+        kind = 'list'
+    elif field.many_to_one:
+        kind = 'reference'
+    else:
+        kind = KINDS.get(internal, 'integer' if 'Integer' in internal or internal == 'AutoField' else 'string')
+    info = {'kind': kind, 'label': str(field.verbose_name), 'writable': writable, 'required': required}
+    if getattr(field, 'help_text', ''):
+        info['help'] = str(field.help_text)
+    if getattr(field, 'max_length', None) and kind in ('string', 'text'):
+        info['max_length'] = field.max_length
+    if field.choices:
+        info['choices'] = [value for value, _ in field.choices]
+    if relation:
+        info['refer_by'] = relation.field
+        info['creates_missing'] = relation.create
+    return info
+
+
 def describe(resource):
-    """What an agent needs to know to use a resource: fields with their help text, limits and choices."""
+    """Everything an agent (or an MCP server generating tools) needs to use a resource."""
+    form_fields = modelform_factory(resource.model, fields=resource.fields)().fields
     fields = {}
     for name in dict.fromkeys(resource.fields + resource.read_only):
         try:
-            field = resource.model._meta.get_field(name)
-        except FieldDoesNotExist:
-            continue
-        info = {'type': field.get_internal_type(), 'writable': name in resource.fields}
-        if getattr(field, 'help_text', ''):
-            info['help'] = str(field.help_text)
-        if getattr(field, 'max_length', None):
-            info['max_length'] = field.max_length
-        if field.choices:
-            info['choices'] = [value for value, _ in field.choices]
-        if name in resource.relations:
-            info['refer_by'] = resource.relations[name].field
-            info['creates_missing'] = resource.relations[name].create
+            writable = name in resource.fields
+            required = writable and name in form_fields and form_fields[name].required
+            fields[name] = _field_info(resource.model, name, required, writable, resource.relations.get(name))
+        except FieldDoesNotExist:  # e.g. a property listed in read_only
+            fields[name] = {'kind': 'string', 'writable': False, 'required': False}
         if name in resource.locked_fields:
-            info['locked_when_published'] = True
-        fields[name] = info
+            fields[name]['locked_when_published'] = True
+    inlines = {}
+    for name, inline in resource.inlines.items():
+        child = modelform_factory(inline.model, fields=inline.fields)().fields
+        inlines[name] = {'fields': {f: _field_info(inline.model, f, child[f].required) for f in inline.fields}}
     return {
         'name': resource.name,
+        'singular': resource.singular,
         'model': str(resource.model._meta.verbose_name),
+        'description': resource.description,
+        'singleton': resource.singleton is not None,
         'lookup': None if resource.singleton else resource.lookup,
         'create': resource.create,
+        'create_defaults': {key: str(value) for key, value in resource.defaults.items()},
         'fields': fields,
         'computed': list(resource.computed),
         'filters': resource.filters,
         'search': resource.search is not None,
-        'actions': list(resource.actions),
-        'inlines': {name: inline.fields for name, inline in resource.inlines.items()},
+        'actions': {name: {'description': action.description, 'params': action.params}
+                    for name, action in resource.actions.items()},
+        'inlines': inlines,
     }
 
 
@@ -316,7 +347,7 @@ def member(request, name, lookup, sub):
             return _not_allowed('POST')
         _require(request, _perm(resource, 'change'))
         with transaction.atomic():
-            obj = resource.actions[sub](obj, request.data) or obj
+            obj = resource.actions[sub].fn(obj, request.data) or obj
             log(request, obj, CHANGE, [{'changed': {'fields': [sub]}}])
         return JsonResponse(serialize(obj, resource))
     if sub in resource.inlines:

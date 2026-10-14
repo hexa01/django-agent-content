@@ -1,6 +1,6 @@
 [project]
 name = "django-agent-content"
-version = "0.1.0"
+version = "0.1.1"
 description = "Let AI agents edit a Django site's content through a small, permission-checked JSON API with revocable keys."
 readme = "README.md"
 license = "MIT"

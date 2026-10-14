@@ -14,7 +14,7 @@ AI agent ──> MCP server ──HTTPS + API key──> your Django site: /api/
 ## Install
 
 ```bash
-pip install "django-agent-content @ git+https://github.com/hexa01/django-agent-content.git@v0.1.0"
+pip install "django-agent-content @ https://github.com/hexa01/django-agent-content/archive/refs/tags/v0.1.1.tar.gz"
 ```
 
 ```python
@@ -42,7 +42,7 @@ python manage.py agent_content_scaffold blog     # writes blog/agent_resources.p
 Then uncomment and adjust:
 
 ```python
-from agent_content import Relation, Resource, register, slug_defaults
+from agent_content import Action, Relation, Resource, register, slug_defaults
 
 from .models import Post
 
@@ -56,7 +56,8 @@ register(Resource(
     create=True, defaults={'status': 'draft'},               # new posts are always drafts
     locked_fields=['slug'], locked_if=lambda post: post.status == 'published',   # links never break
     filters=['status'],                                      # ?status=draft
-    actions={'publish': publish},                            # POST /api/agent/posts/<slug>/publish/
+    actions={'publish': Action(publish, 'Make the post public.',            # POST /api/agent/posts/<slug>/publish/
+                               {'published_at': 'ISO date to show, optional'})},
 ))
 ```
 
@@ -70,6 +71,8 @@ effects match the admin.
 | `fields` | Writable (and readable) fields. |
 | `name` | URL name; default: the model's plural, e.g. `posts`. |
 | `lookup` | Field used in item URLs; default `pk`. |
+| `singular` | One item's name, used for tool names (`get_post`); default: the model's name. |
+| `description` | What this content is, shown to agents. |
 | `read_only` | Readable but not writable. |
 | `computed` | Read-only values: `{'url': lambda obj: obj.get_absolute_url()}`. |
 | `list_fields` | Fields shown in lists. |
@@ -79,7 +82,7 @@ effects match the admin.
 | `filters`, `search` | `?field=value` filters; `search(queryset, text)` for `?q=`. |
 | `queryset` | `queryset()` if not `Model.objects.all()`. |
 | `singleton` | `get()` for one-object resources such as site settings: `/api/agent/<name>/`. |
-| `actions` | `{'publish': fn(obj, data)}`: `POST <lookup>/<name>/`. |
+| `actions` | `{'publish': Action(fn, 'what it does', {'param': 'what it is'})}`: `POST <lookup>/<name>/`; `fn(obj, data)` returns the object. A plain function also works (its docstring describes it). |
 | `inlines` | `{'notes': Inline(Note, fk='article', fields=[...], order_field='position')}`: `GET`/`PUT <lookup>/notes/` replaces the list. |
 
 ## API keys
@@ -101,7 +104,7 @@ Agents send `Authorization: Bearer <key>`.
 
 | Request | Does |
 |---|---|
-| `GET /api/agent/` | API version and a description of every resource the key may see (fields, help texts, limits, actions). |
+| `GET /api/agent/` | API version and a description of every resource the key may see: each field's kind, label, help text, limits, choices and whether it's required, plus actions with their params. [agent-content-mcp](https://github.com/hexa01/agent-content-mcp) builds its tools from this. |
 | `GET <name>/` | List (`?field=value`, `?q=`). |
 | `POST <name>/` | Create (when `create=True`). |
 | `GET`, `PATCH <name>/<lookup>/` | Read, or change only the fields sent. |
@@ -137,6 +140,13 @@ Tip: add `Disallow: /api/` to your `robots.txt`.
 python -m venv .venv && .venv/bin/pip install "Django>=5.2"
 .venv/bin/python runtests.py            # SQLite, no project needed
 ```
+
+## Changelog
+
+- **0.1.1**: updates change only the fields sent (unsent text is left exactly as it was); actions take a
+  description and params (`Action`); the API description adds field kinds, labels, `required`, `singular` and
+  create defaults.
+- **0.1.0**: first release.
 
 ## License
 

@@ -1,7 +1,7 @@
 from django.core.exceptions import ValidationError
 from django.utils.dateparse import parse_datetime
 
-from agent_content import Inline, Relation, Resource, register, slug_defaults
+from agent_content import Action, Inline, Relation, Resource, register, slug_defaults
 
 from .models import Article, Category, Note, SiteInfo  # noqa: F401
 
@@ -32,7 +32,7 @@ register(Resource(
     locked_if=lambda article: article.status == 'published',
     filters=['status'],
     search=lambda articles, text: articles.filter(title__icontains=text),
-    actions={'publish': publish},
+    actions={'publish': Action(publish, 'Make the article public.', {'published_at': 'ISO date, optional.'})},
     inlines={'notes': Inline(Note, fk='article', fields=['text'], order_field='position')},
 ))
 

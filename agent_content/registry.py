@@ -25,6 +25,16 @@ def slug_defaults(value):
 
 
 @dataclass
+class Action:
+    """Something done to one object, e.g. publishing: POST <resource>/<lookup>/<name>/ with params as JSON.
+    fn(obj, data) does it and returns the object. description and params tell agents what it does and takes."""
+
+    fn: Callable
+    description: str = ''
+    params: dict[str, str] = field(default_factory=dict)   # name -> what it is, e.g. {'published_at': 'ISO date, optional'}
+
+
+@dataclass
 class Inline:
     """Child rows edited as one list, e.g. a project's key decisions: GET or PUT <resource>/<lookup>/<name>/.
     PUT replaces the whole list (rows not sent are removed), in the order given."""
@@ -40,6 +50,8 @@ class Resource:
     model: Any
     fields: list[str]                                   # what agents may write (and read)
     name: str | None = None                             # URL name; default: the model's plural, e.g. "posts"
+    singular: str | None = None                         # one item, for tool names; default: the model's name
+    description: str = ''                               # what this content is, for agents
     lookup: str = 'pk'                                  # field used in item URLs
     read_only: list[str] = field(default_factory=list)  # extra fields agents may read but not write
     computed: dict[str, Callable] = field(default_factory=dict)  # read-only values, e.g. {'url': lambda o: ...}
@@ -53,12 +65,18 @@ class Resource:
     search: Callable | None = None                      # search(queryset, text) for ?q=
     queryset: Callable | None = None                    # queryset() if not model.objects.all()
     singleton: Callable | None = None                   # get() for one-object resources (e.g. a site profile)
-    actions: dict[str, Callable] = field(default_factory=dict)   # name -> fn(obj, data); POST <lookup>/<name>/
+    actions: dict[str, Action | Callable] = field(default_factory=dict)   # POST <lookup>/<name>/
     inlines: dict[str, Inline] = field(default_factory=dict)
 
     def __post_init__(self):
         if self.name is None:
             self.name = slugify(str(self.model._meta.verbose_name_plural))
+        if self.singular is None:
+            self.singular = self.name if self.singleton else slugify(str(self.model._meta.verbose_name)).replace('-', '_')
+        # a plain function is an action without params; its docstring's first line describes it
+        self.actions = {name: action if isinstance(action, Action)
+                        else Action(action, ((action.__doc__ or '').strip().splitlines() or [''])[0])
+                        for name, action in self.actions.items()}
         if self.list_fields is None:
             self.list_fields = list(dict.fromkeys([self.lookup] + self.fields[:2] + self.read_only[:3]))
 
