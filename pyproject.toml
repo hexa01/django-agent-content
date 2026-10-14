@@ -1,0 +1,29 @@
+[project]
+name = "django-agent-content"
+version = "0.1.0"
+description = "Let AI agents edit a Django site's content through a small, permission-checked JSON API with revocable keys."
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "Sushan Poudel" }]
+requires-python = ">=3.10"
+dependencies = ["Django>=4.2"]
+keywords = ["django", "api", "mcp", "ai agents", "cms"]
+classifiers = [
+    "Framework :: Django",
+    "Framework :: Django :: 4.2",
+    "Framework :: Django :: 5.2",
+    "Programming Language :: Python :: 3",
+    "Intended Audience :: Developers",
+]
+
+[project.urls]
+Repository = "https://github.com/hexa01/django-agent-content"
+"MCP server" = "https://github.com/hexa01/agent-content-mcp"
+
+[build-system]
+requires = ["poetry-core>=2.0"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.poetry]
+packages = [{ include = "agent_content" }]

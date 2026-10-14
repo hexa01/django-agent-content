@@ -1,0 +1,7 @@
+__pycache__/
+*.pyc
+.venv/
+dist/
+*.egg-info/
+.coverage
+tests/testapp/scaffold_test_output.py
