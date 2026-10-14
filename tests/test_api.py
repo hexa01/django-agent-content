@@ -152,7 +152,14 @@ class WriteTests(APITestCase):
         self.live.refresh_from_db()
         self.assertEqual((self.live.summary, self.live.title, self.live.status), ('Short.', 'Live', 'published'))
         self.assertEqual(list(self.live.tags.values_list('name', flat=True)), ['Django'])
-        self.assertIn('Summary', LogEntry.objects.get(object_id=str(self.live.pk)).get_change_message())
+        self.assertEqual(LogEntry.objects.get(object_id=str(self.live.pk)).get_change_message(), 'Changed Summary.')
+
+    def test_update_leaves_unsent_text_exactly_as_it_was(self):
+        self.live.body = 'Ends with a newline.\n'
+        self.live.save()
+        self.call('patch', 'articles/live/', {'title': 'Renamed'})
+        self.live.refresh_from_db()
+        self.assertEqual(self.live.body, 'Ends with a newline.\n')
 
     def test_action_runs_with_its_data(self):
         Article.objects.create(slug='draft', title='Draft', body='x')

@@ -164,14 +164,10 @@ def save(request, resource, instance, data):
             transaction.set_rollback(True)
             raise APIError(400, 'Some fields are invalid.', fields=errors)
 
-        if adding:
-            target = resource.model(**resource.defaults)
-            values = data
-        else:
-            target = instance
-            values = {**_current_values(instance, resource), **data}
-
-        form = modelform_factory(resource.model, fields=resource.fields)(data=values, instance=target)
+        # a create validates every writable field; an update only the ones sent, so the rest stay untouched
+        target = resource.model(**resource.defaults) if adding else instance
+        fields = resource.fields if adding else [name for name in resource.fields if name in data]
+        form = modelform_factory(resource.model, fields=fields)(data=data, instance=target)
         if not form.is_valid():
             transaction.set_rollback(True)
             raise APIError(400, 'Some fields are invalid.', fields={
