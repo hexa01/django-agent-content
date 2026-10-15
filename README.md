@@ -1,5 +1,7 @@
 # django-agent-content
 
+[![PyPI](https://img.shields.io/pypi/v/django-agent-content)](https://pypi.org/project/django-agent-content/) [![Python](https://img.shields.io/pypi/pyversions/django-agent-content)](https://pypi.org/project/django-agent-content/) [![License: MIT](https://img.shields.io/pypi/l/django-agent-content)](https://github.com/hexa01/django-agent-content/blob/main/LICENSE)
+
 **Django + MCP: let AI agents edit your site's content, safely.**
 
 Claude Code, Cursor and other MCP clients (through [agent-content-mcp](https://github.com/hexa01/agent-content-mcp)),
@@ -14,7 +16,7 @@ AI agent ──> MCP server ──HTTPS + API key──> your Django site: /api/
 ## Install
 
 ```bash
-pip install "django-agent-content @ https://github.com/hexa01/django-agent-content/archive/refs/tags/v0.1.1.tar.gz"
+pip install django-agent-content
 ```
 
 ```python
