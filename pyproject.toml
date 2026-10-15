@@ -1,24 +1,40 @@
 [project]
 name = "django-agent-content"
-version = "0.1.1"
-description = "Let AI agents edit a Django site's content through a small, permission-checked JSON API with revocable keys."
+version = "0.1.2"
+description = "Django app that lets AI agents and MCP clients (Claude Code, Cursor and others) edit your site's content safely: API keys, permissions, drafts, no deletes."
 readme = "README.md"
 license = "MIT"
 license-files = ["LICENSE"]
 authors = [{ name = "Sushan Poudel" }]
 requires-python = ">=3.10"
 dependencies = ["Django>=4.2"]
-keywords = ["django", "api", "mcp", "ai agents", "cms"]
+keywords = [
+    "django", "mcp", "model context protocol", "ai agents", "llm", "claude", "cms",
+    "content api", "headless cms", "django admin", "api keys",
+]
 classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Web Environment",
     "Framework :: Django",
     "Framework :: Django :: 4.2",
     "Framework :: Django :: 5.2",
-    "Programming Language :: Python :: 3",
     "Intended Audience :: Developers",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Internet :: WWW/HTTP :: Dynamic Content",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
 ]
 
 [project.urls]
-Repository = "https://github.com/hexa01/django-agent-content"
+Homepage = "https://github.com/hexa01/django-agent-content"
+Documentation = "https://github.com/hexa01/django-agent-content#readme"
+Changelog = "https://github.com/hexa01/django-agent-content#changelog"
+Issues = "https://github.com/hexa01/django-agent-content/issues"
 "MCP server" = "https://github.com/hexa01/agent-content-mcp"
 
 [build-system]

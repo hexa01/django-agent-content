@@ -1,11 +1,11 @@
 # django-agent-content
 
-Let AI agents edit your Django site's content (blog posts, pages, profiles, anything with a model) through a small,
-permission-checked JSON API. You decide which models and fields are editable; agents use revocable API keys that act
-as a Django user, so permissions and the admin's change history work as usual. Nothing is ever deleted.
+**Django + MCP: let AI agents edit your site's content, safely.**
 
-It is the server side for [agent-content-mcp](https://github.com/hexa01/agent-content-mcp), an MCP server that lets
-Claude Code and other MCP clients use the API as tools, but any HTTP client works.
+Claude Code, Cursor and other MCP clients (through [agent-content-mcp](https://github.com/hexa01/agent-content-mcp)),
+or any HTTP client, can read and edit the models you choose: blog posts, pages, profiles, products. You decide which
+models and fields are editable. Agents use revocable API keys that act as a Django user, so permissions and the admin's
+change history work as usual. New content can be forced to drafts, and nothing is ever deleted.
 
 ```
 AI agent ──> MCP server ──HTTPS + API key──> your Django site: /api/agent/ ──> your models (via ModelForms)
@@ -66,8 +66,8 @@ effects match the admin.
 
 ### Full example
 
-[`tests/testapp`](tests/testapp) is a small working app used by the tests:
-[`models.py`](tests/testapp/models.py) and its [`agent_resources.py`](tests/testapp/agent_resources.py) show most
+[`tests/testapp`](https://github.com/hexa01/django-agent-content/tree/main/tests/testapp) is a small working app used by the tests:
+[`models.py`](https://github.com/hexa01/django-agent-content/blob/main/tests/testapp/models.py) and its [`agent_resources.py`](https://github.com/hexa01/django-agent-content/blob/main/tests/testapp/agent_resources.py) show most
 options together: references by name, tags created when missing, drafts by default, a slug that locks once
 published, a filter, search, a `publish` action with a parameter, an inline list (an article's notes) and a
 single-object resource (site settings).
@@ -151,6 +151,7 @@ python -m venv .venv && .venv/bin/pip install "Django>=5.2"
 
 ## Changelog
 
+- **0.1.2**: package metadata for PyPI (summary, keywords, classifiers, links); README example app and wording.
 - **0.1.1**: updates change only the fields sent (unsent text is left exactly as it was); actions take a
   description and params (`Action`); the API description adds field kinds, labels, `required`, `singular` and
   create defaults.
