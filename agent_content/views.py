@@ -2,6 +2,8 @@
 ModelForms and model.save(), so validation and side effects match the admin. Nothing is ever deleted,
 except child rows replaced through an inline."""
 
+import mimetypes
+
 from django.contrib.admin.models import ADDITION, CHANGE, LogEntry
 from django.contrib.admin.utils import construct_change_message
 from django.core.exceptions import FieldDoesNotExist, ObjectDoesNotExist, ValidationError
@@ -10,6 +12,7 @@ from django.forms import modelform_factory
 from django.forms.models import model_to_dict
 from django.http import JsonResponse
 
+from . import conf
 from .auth import agent_view, error
 from .registry import resources
 
@@ -48,7 +51,7 @@ def serialize(obj, resource, full=True):
     """All readable fields, computed values and inline lists; or with full=False, just the list fields."""
     if not full:
         return {name: _value(obj, name, resource) for name in resource.list_fields}
-    names = dict.fromkeys([resource.lookup] + resource.fields + resource.read_only)
+    names = dict.fromkeys([resource.lookup] + resource.fields + resource.read_only + list(resource.uploads))
     data = {name: _value(obj, name, resource) for name in names}
     data.update({name: fn(obj) for name, fn in resource.computed.items()})
     data.update({name: _inline_rows(obj, inline) for name, inline in resource.inlines.items()})
@@ -109,6 +112,18 @@ def describe(resource):
     for name, inline in resource.inlines.items():
         child = modelform_factory(inline.model, fields=inline.fields)().fields
         inlines[name] = {'fields': {f: _field_info(inline.model, f, child[f].required) for f in inline.fields}}
+    uploads = {}
+    for name, upload in resource.uploads.items():
+        model_field = resource.model._meta.get_field(name)
+        uploads[name] = {
+            'kind': 'image' if isinstance(model_field, models.ImageField) else 'file',
+            'label': str(model_field.verbose_name),
+            'required_on_create': not model_field.blank,
+            'accept': upload.accept,
+            'max_bytes': _max_bytes(upload),
+        }
+        if model_field.help_text:
+            uploads[name]['help'] = str(model_field.help_text)
     return {
         'name': resource.name,
         'singular': resource.singular,
@@ -125,6 +140,7 @@ def describe(resource):
         'actions': {name: {'description': action.description, 'params': action.params}
                     for name, action in resource.actions.items()},
         'inlines': inlines,
+        'uploads': uploads,
     }
 
 
@@ -176,11 +192,38 @@ def _current_values(instance, resource):
     return values
 
 
-def save(request, resource, instance, data):
-    """Validate and save a create (instance=None) or a partial update. Returns the saved object."""
+def _max_bytes(upload):
+    return upload.max_bytes or conf.get('AGENT_CONTENT_MAX_UPLOAD')
+
+
+def _check_uploads(resource, files):
+    """Size and type checks before anything is saved; the field's own validators run in the form afterwards.
+    The type comes from the file name, so a site that must be sure of the content validates it in the model."""
+    unknown = sorted(set(files) - set(resource.uploads))
+    if unknown:
+        raise APIError(400, f'These files can\'t be uploaded: {", ".join(unknown)}. '
+                            f'Uploads: {", ".join(resource.uploads) or "none"}.')
+    errors = {}
+    for name, uploaded in files.items():
+        upload = resource.uploads[name]
+        if uploaded.size > _max_bytes(upload):
+            errors[name] = [f'The file is {uploaded.size:,} bytes; the limit is {_max_bytes(upload):,}.']
+            continue
+        kind = mimetypes.guess_type(uploaded.name)[0] or ''
+        if upload.accept and not any(kind == a or (a.endswith('/') and kind.startswith(a)) for a in upload.accept):
+            errors[name] = [f'"{uploaded.name}" is {kind or "an unknown type"}; allowed: {", ".join(upload.accept)}.']
+    if errors:
+        raise APIError(400, 'Some files are invalid.', fields=errors)
+
+
+def save(request, resource, instance, data, files=None):
+    """Validate and save a create (instance=None) or a partial update, with optional uploaded files.
+    Returns the saved object."""
+    files = files or {}
     unknown = sorted(set(data) - set(resource.fields))
     if unknown:
         raise APIError(400, f'These fields can\'t be written: {", ".join(unknown)}. Writable: {", ".join(resource.fields)}.')
+    _check_uploads(resource, files)
 
     if instance is not None and resource.locked_if and resource.locked_if(instance):
         current = _current_values(instance, resource)
@@ -195,10 +238,13 @@ def save(request, resource, instance, data):
             transaction.set_rollback(True)
             raise APIError(400, 'Some fields are invalid.', fields=errors)
 
-        # a create validates every writable field; an update only the ones sent, so the rest stay untouched
+        # a create validates every writable field and upload; an update only the ones sent, so the rest stay untouched
         target = resource.model(**resource.defaults) if adding else instance
-        fields = resource.fields if adding else [name for name in resource.fields if name in data]
-        form = modelform_factory(resource.model, fields=fields)(data=data, instance=target)
+        if adding:
+            fields = resource.fields + list(resource.uploads)
+        else:
+            fields = [name for name in resource.fields if name in data] + [name for name in resource.uploads if name in files]
+        form = modelform_factory(resource.model, fields=fields)(data=data, files=files, instance=target)
         if not form.is_valid():
             transaction.set_rollback(True)
             raise APIError(400, 'Some fields are invalid.', fields={
@@ -314,7 +360,7 @@ def collection(request, name):
         if not resource.create:
             raise APIError(405, f'New {resource.name} can\'t be created through the API.')
         _require(request, _perm(resource, 'add'))
-        obj = save(request, resource, None, request.data)
+        obj = save(request, resource, None, request.data, request.uploads)
         return JsonResponse(serialize(obj, resource), status=201)
     return _not_allowed('GET', 'POST')
 
@@ -322,7 +368,10 @@ def collection(request, name):
 @agent_view
 @handles_errors
 def item(request, name, lookup):
-    return _item(request, _resource(name), lookup)
+    resource = _resource(name)
+    if resource.singleton:  # a singleton has no lookup: <name>/<upload, action or inline>/
+        return _member(request, resource, resource.singleton(), lookup)
+    return _item(request, resource, lookup)
 
 
 def _item(request, resource, lookup):
@@ -339,9 +388,22 @@ def _item(request, resource, lookup):
 @agent_view
 @handles_errors
 def member(request, name, lookup, sub):
-    """POST <lookup>/<action>/ runs an action; GET or PUT <lookup>/<inline>/ reads or replaces child rows."""
     resource = _resource(name)
-    obj = _object(resource, lookup)
+    return _member(request, resource, _object(resource, lookup), sub)
+
+
+def _member(request, resource, obj, sub):
+    """POST <lookup>/<action>/ runs an action; POST <lookup>/<upload>/ (multipart, part "file") sets a file;
+    GET or PUT <lookup>/<inline>/ reads or replaces child rows."""
+    if sub in resource.uploads:
+        if request.method != 'POST':
+            return _not_allowed('POST')
+        _require(request, _perm(resource, 'change'))
+        uploaded = request.uploads.get('file')
+        if uploaded is None:
+            raise APIError(400, 'Send the file as multipart/form-data in a part named "file".')
+        obj = save(request, resource, obj, {}, {sub: uploaded})
+        return JsonResponse(serialize(obj, resource))
     if sub in resource.actions:
         if request.method != 'POST':
             return _not_allowed('POST')
@@ -361,5 +423,6 @@ def member(request, name, lookup, sub):
             replace_inline(request, resource, obj, sub, inline)
             return JsonResponse({'items': _inline_rows(obj, inline)})
         return _not_allowed('GET', 'PUT')
-    raise APIError(404, f'No action or list "{sub}" on {resource.name}. '
+    raise APIError(404, f'No upload, action or list "{sub}" on {resource.name}. '
+                        f'Uploads: {", ".join(resource.uploads) or "none"}. '
                         f'Actions: {", ".join(resource.actions) or "none"}. Lists: {", ".join(resource.inlines) or "none"}.')

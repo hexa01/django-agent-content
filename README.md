@@ -71,8 +71,27 @@ effects match the admin.
 [`tests/testapp`](https://github.com/hexa01/django-agent-content/tree/main/tests/testapp) is a small working app used by the tests:
 [`models.py`](https://github.com/hexa01/django-agent-content/blob/main/tests/testapp/models.py) and its [`agent_resources.py`](https://github.com/hexa01/django-agent-content/blob/main/tests/testapp/agent_resources.py) show most
 options together: references by name, tags created when missing, drafts by default, a slug that locks once
-published, a filter, search, a `publish` action with a parameter, an inline list (an article's notes) and a
-single-object resource (site settings).
+published, a filter, search, a `publish` action with a parameter, an inline list (an article's notes), file
+uploads (an article's cover, a document whose file is required) and a single-object resource (site settings).
+
+### File and image uploads
+
+List a model's `FileField` or `ImageField` under `uploads` and agents can set it by uploading a file:
+
+```python
+from agent_content import Resource, Upload, register
+
+register(Resource(
+    Post, lookup='slug', fields=['title', 'body'],
+    uploads={'cover': Upload(accept=['image/'], max_bytes=3_000_000)},   # or simply uploads=['cover']
+))
+```
+
+The upload goes through a ModelForm and `model.save()`, exactly like an upload in the admin: the field's validators
+run (an `ImageField` checks the file really is an image), and whatever your `save()` does (resizing, converting,
+cleaning) happens to agent uploads too. Files are stored by your project's `STORAGES`, in the same place as admin
+uploads. `accept` checks the type from the file name, and `max_bytes` the size, before anything is saved; to be sure
+of a file's actual contents, validate them in the model, as you would for the admin.
 
 ### Resource options
 
@@ -94,6 +113,7 @@ single-object resource (site settings).
 | `singleton` | `get()` for one-object resources such as site settings: `/api/agent/<name>/`. |
 | `actions` | `{'publish': Action(fn, 'what it does', {'param': 'what it is'})}`: `POST <lookup>/<name>/`; `fn(obj, data)` returns the object. A plain function also works (its docstring describes it). |
 | `inlines` | `{'notes': Inline(Note, fk='article', fields=[...], order_field='position')}`: `GET`/`PUT <lookup>/notes/` replaces the list. |
+| `uploads` | `{'cover': Upload(accept=['image/'], max_bytes=...)}` or `['cover']`: file fields set by upload, see above. |
 
 ## API keys
 
@@ -114,11 +134,12 @@ Agents send `Authorization: Bearer <key>`.
 
 | Request | Does |
 |---|---|
-| `GET /api/agent/` | API version and a description of every resource the key may see: each field's kind, label, help text, limits, choices and whether it's required, plus actions with their params. [agent-content-mcp](https://github.com/hexa01/agent-content-mcp) builds its tools from this. |
+| `GET /api/agent/` | API version and a description of every resource the key may see: each field's kind, label, help text, limits, choices and whether it's required, plus actions with their params and uploads with their allowed types and size. [agent-content-mcp](https://github.com/hexa01/agent-content-mcp) builds its tools from this. |
 | `GET <name>/` | List (`?field=value`, `?q=`). |
-| `POST <name>/` | Create (when `create=True`). |
+| `POST <name>/` | Create (when `create=True`). With uploads: `multipart/form-data`, the JSON in a part named `data` and each file in a part named after its field. |
 | `GET`, `PATCH <name>/<lookup>/` | Read, or change only the fields sent. |
 | `POST <name>/<lookup>/<action>/` | Run an action. |
+| `POST <name>/<lookup>/<upload>/` | Set a file: `multipart/form-data` with the file in a part named `file`. For a singleton: `POST <name>/<upload>/`. |
 | `GET`, `PUT <name>/<lookup>/<inline>/` | Read or replace child rows. |
 
 Errors are JSON: `{"error": "...", "fields": {"slug": ["..."]}}`, written so an agent can fix its request.
@@ -133,6 +154,7 @@ All optional.
 | `AGENT_CONTENT_ADMIN_BASE` | `'django.contrib.admin.ModelAdmin'` | Base class for the key admin, e.g. `'unfold.admin.ModelAdmin'` for Unfold. |
 | `AGENT_CONTENT_RATE_LIMIT` | `120` | Requests per minute per key. |
 | `AGENT_CONTENT_MAX_BODY` | `1000000` | Largest request body in bytes. |
+| `AGENT_CONTENT_MAX_UPLOAD` | `5000000` | Largest uploaded file in bytes (an `Upload` can set a lower `max_bytes`). Keep your web server's limit (e.g. Nginx `client_max_body_size`) a little above it. |
 | `AGENT_CONTENT_REQUIRE_HTTPS` | `None` | Refuse plain HTTP; `None` means "unless `DEBUG`". Behind a proxy, set Django's `SECURE_PROXY_SSL_HEADER`. |
 
 Tip: add `Disallow: /api/` to your `robots.txt`.
@@ -142,6 +164,8 @@ Tip: add `Disallow: /api/` to your `robots.txt`.
 - Keys are hashed, can expire, and can be revoked at any time; keys of inactive users stop working.
 - What a key can do is its user's Django permissions. The API has no delete endpoints (inline lists replace their rows).
 - HTTPS is required outside `DEBUG`; requests are rate-limited and size-limited.
+- Uploads are only possible for fields you list under `uploads`. An oversized upload is refused before it's read,
+  and files are checked by type and size, then by the field's own validators, before anything is saved.
 - Every change is recorded in the admin's history under the key's user.
 
 ## Development
@@ -153,6 +177,8 @@ python -m venv .venv && .venv/bin/pip install "Django>=5.2"
 
 ## Changelog
 
+- **0.2.0**: file and image uploads (`Upload`, the `uploads` resource option, `AGENT_CONTENT_MAX_UPLOAD`); the API
+  description lists each resource's uploads.
 - **0.1.2**: package metadata for PyPI (summary, keywords, classifiers, links); README example app and wording.
 - **0.1.1**: updates change only the fields sent (unsent text is left exactly as it was); actions take a
   description and params (`Action`); the API description adds field kinds, labels, `required`, `singular` and
@@ -161,4 +187,4 @@ python -m venv .venv && .venv/bin/pip install "Django>=5.2"
 
 ## License
 
-MIT
+MIT. Built by [Sushan Poudel](https://sushanpoudel.com).

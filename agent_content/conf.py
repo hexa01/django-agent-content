@@ -11,6 +11,8 @@ DEFAULTS = {
     'AGENT_CONTENT_RATE_LIMIT': 120,
     # largest accepted request body, in bytes
     'AGENT_CONTENT_MAX_BODY': 1_000_000,
+    # largest accepted uploaded file, in bytes (per file; an Upload can set a lower max_bytes)
+    'AGENT_CONTENT_MAX_UPLOAD': 5_000_000,
     # refuse plain http; None means "only when DEBUG is off"
     'AGENT_CONTENT_REQUIRE_HTTPS': None,
 }

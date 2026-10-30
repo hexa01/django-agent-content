@@ -1,11 +1,13 @@
 """What agents may edit. Apps describe their models in `agent_resources.py`; the API is built from these descriptions.
 
-    register(Resource(Post, lookup='slug', fields=['title', 'body'], create=True, defaults={'status': 'draft'}))
+    register(Resource(Post, lookup='slug', fields=['title', 'body'], create=True, defaults={'status': 'draft'},
+                      uploads={'cover': Upload(accept=['image/'])}))
 """
 
 from dataclasses import dataclass, field
 from typing import Any, Callable
 
+from django.db import models
 from django.utils.text import slugify
 
 
@@ -46,6 +48,18 @@ class Inline:
 
 
 @dataclass
+class Upload:
+    """A FileField or ImageField agents may set by uploading a file: POST <resource>/<lookup>/<field>/ as multipart
+    (the file in a part named "file"), or as a part of a multipart create. The model's validators and save() run as
+    in the admin, so resizing or checks the site already does apply to agent uploads too.
+    accept: allowed types by file name, as MIME types or prefixes, e.g. ['image/'] or ['application/pdf'];
+    empty allows any type the field itself accepts. max_bytes: default AGENT_CONTENT_MAX_UPLOAD."""
+
+    accept: list[str] = field(default_factory=list)
+    max_bytes: int | None = None
+
+
+@dataclass
 class Resource:
     model: Any
     fields: list[str]                                   # what agents may write (and read)
@@ -67,6 +81,7 @@ class Resource:
     singleton: Callable | None = None                   # get() for one-object resources (e.g. a site profile)
     actions: dict[str, Action | Callable] = field(default_factory=dict)   # POST <lookup>/<name>/
     inlines: dict[str, Inline] = field(default_factory=dict)
+    uploads: dict[str, Upload] | list[str] = field(default_factory=dict)   # file fields set by upload
 
     def __post_init__(self):
         if self.name is None:
@@ -77,6 +92,17 @@ class Resource:
         self.actions = {name: action if isinstance(action, Action)
                         else Action(action, ((action.__doc__ or '').strip().splitlines() or [''])[0])
                         for name, action in self.actions.items()}
+        # a plain list of field names uploads with the defaults
+        if not isinstance(self.uploads, dict):
+            self.uploads = {name: Upload() for name in self.uploads}
+        for name in self.uploads:
+            if not isinstance(self.model._meta.get_field(name), models.FileField):
+                raise ValueError(f'Upload "{name}" on {self.label} is not a FileField or ImageField.')
+        clashes = (set(self.uploads) & set(self.actions)) | (set(self.uploads) & set(self.inlines)) \
+            | (set(self.actions) & set(self.inlines))
+        if clashes:
+            raise ValueError(f'{self.label}: {", ".join(sorted(clashes))} is used for more than one of '
+                             'uploads, actions and inlines (they share URLs).')
         if self.list_fields is None:
             self.list_fields = list(dict.fromkeys([self.lookup] + self.fields[:2] + self.read_only[:3]))
 
