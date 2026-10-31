@@ -177,13 +177,7 @@ python -m venv .venv && .venv/bin/pip install "Django>=5.2"
 
 ## Changelog
 
-- **0.2.0**: file and image uploads (`Upload`, the `uploads` resource option, `AGENT_CONTENT_MAX_UPLOAD`); the API
-  description lists each resource's uploads.
-- **0.1.2**: package metadata for PyPI (summary, keywords, classifiers, links); README example app and wording.
-- **0.1.1**: updates change only the fields sent (unsent text is left exactly as it was); actions take a
-  description and params (`Action`); the API description adds field kinds, labels, `required`, `singular` and
-  create defaults.
-- **0.1.0**: first release.
+What's new and fixed in each version: [CHANGELOG.md](https://github.com/hexa01/django-agent-content/blob/main/CHANGELOG.md).
 
 ## License
 
